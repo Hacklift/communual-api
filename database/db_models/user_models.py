@@ -3,7 +3,7 @@ from app import db
 from flask_bcrypt import Bcrypt
 import jwt
 from datetime import datetime, timedelta
-from instance.config import Config
+from database.config import Config
 
 
 class User(db.Model):
@@ -19,6 +19,7 @@ class User(db.Model):
     lastname = db.Column(db.String(256), nullable=True)
     password = db.Column(db.String(256), nullable=False)
     phone_number = db.Column(db.String(256), nullable=False, unique=True)
+    registered_on = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     def __init__(self, email, password, phone_number, firstname, lastname, username):
         """Initialize the user with an email and a password."""
@@ -29,11 +30,20 @@ class User(db.Model):
         self.firstname = firstname
         self.lastname = lastname
 
-    def password_is_valid(self, password):
+    def generate_password_hash(self, password):
         """
-        Checks the password against it's hash to validates the user's password
+        Generate a password hash from the password provided
         """
-        return Bcrypt().check_password_hash(self.password, password)
+        psw_hash = Bcrypt().generate_password_hash(password)
+
+        return psw_hash
+
+    def check_password_validation(self, psw_hash, password):
+        """
+        Check the validity of the password against the one provided by the user
+        """
+        check_password = Bcrypt().check_password_hash(psw_hash, password)
+        return check_password
 
     def save(self):
         """Save a user to the database.
@@ -64,3 +74,36 @@ class User(db.Model):
         except Exception as e:
             # return an error in string format if an exception occurs
             return str(e)
+
+    def generate_email_token(self, email):
+        """ Generates the access token"""
+        try:
+            # set up a payload with an expiration time
+            payload = {
+                'exp': datetime.utcnow() + timedelta(minutes=60),
+                'iat': datetime.utcnow(),
+                'sub': email
+            }
+            # create the byte string token using the payload and the SECRET key
+
+            jwt_string = jwt.encode(
+                payload,
+                os.getenv('SECRET'),
+                algorithm='HS256'
+            )
+            return jwt_string
+
+        except Exception as e:
+            # return an error in string format if an exception occurs
+            return str(e)
+
+    @staticmethod
+    def decode_email_token(email_token):
+        """Decodes the access token from the from the URL."""
+        try:
+            # try to decode the email_token using our SECRET variable
+            payload = jwt.decode(email_token, os.getenv('SECRET'))
+            return payload['sub']
+        except:
+            return "Expired token."
+        return payload
