@@ -2,6 +2,8 @@ import os
 import unittest
 import json
 from app import create_app, db
+from database.db_models.user_models import User
+import datetime
 
 
 class AuthTestCase(unittest.TestCase):
@@ -17,7 +19,14 @@ class AuthTestCase(unittest.TestCase):
             "email": "example1@mail.com",
             "password": "password",
             "username": "example1",
-            "phone_number": "09067582433"
+            "phone_number": "09067582433",
+        }
+        # This is the user test json data with a predefined email, password and confirmed = True
+        self.confirmed_user_data = {
+            "email": "example2@mail.com",
+            "password": "password",
+            "username": "example2",
+            "phone_number": "09067582777",
         }
 
         with self.app.app_context():
@@ -25,6 +34,13 @@ class AuthTestCase(unittest.TestCase):
             db.session.close()
             db.drop_all()
             db.create_all()
+            user_1 = User(email="example3@mail.com", password="password", username="example3",
+                        phone_number="09067582999", confirmed=False, firstname='', lastname='')
+            user_2 = User(email="example2@mail.com", password="password", username="example2",
+                        phone_number="09067582777", confirmed=True, firstname='', lastname='')
+            
+            user_1.save()
+            user_2.save()
 
     def test_registration(self):
         """Test user registeration works correctly."""
@@ -32,7 +48,8 @@ class AuthTestCase(unittest.TestCase):
         # Get the results returned in json format
         result = json.loads(res.data.decode())
         # assert that the request contains a success message and a 201 status code
-        self.assertEqual(result['message'], "You registered successfully.")
+        self.assertEqual(
+            result['message'], "Registration Successful. An email has been sent to this email: %s. Please confirm your email to proceed." % (self.user_data['email']))
         self.assertEqual(res.status_code, 201)
 
     def test_invalid_email_input(self):
@@ -110,7 +127,8 @@ class AuthTestCase(unittest.TestCase):
         self.assertEqual(
             result['message'], 'Email or phone number is already been used by an existing user. Please try again.')
 
-    # Login test
+    """ Test for LoginView Controller """
+
     def test_user_login(self):
         """Test registered user can login."""
         res = self.client().post('/api/auth/signup', data=self.user_data)
@@ -156,3 +174,123 @@ class AuthTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 401)
         self.assertEqual(
             result['message'], "Invalide credentials, Please try again.")
+
+    """ Test Email Confirmation View Controller """
+
+    def test_email_confirmation_route_valid_token(self):
+        """Test for email confirmation mail been sent"""
+        self.email_user_data = {
+            "email": "example@mail.com",
+            "password": "password",
+            "username": "example",
+            "phone_number": "09067582555"
+        }
+        res = self.client().post('/api/auth/signup', data=self.email_user_data)
+
+        email_token = User.generate_email_token(self, email='example@mail.com')
+
+        email_res = self.client().get(
+            '/api/auth/email-confirmation/?emailtoken='+email_token.decode())
+
+        # Get the results returned in json format
+        result = json.loads(email_res.data.decode())
+
+        # assert that this response must contain an error message
+        # and an error status code 200(Successful)
+        self.assertEqual(
+            result['message'], "Your have confirmed your accounts. Thanks!"
+        )
+        self.assertEqual(email_res.status_code, 200)
+
+    def test_email_already_confirmed(self):
+        """Test for email already confirmed by user"""
+        email_token = User.generate_email_token(
+            self, email='example2@mail.com')
+
+        email_res = self.client().get(
+            '/api/auth/email-confirmation/?emailtoken='+email_token.decode())
+
+        # Get the results returned in json format
+        result = json.loads(email_res.data.decode())
+        # assert that this response must contain an error message
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], "This Account has already been confirmed."
+        )
+        self.assertEqual(email_res.status_code, 409)
+    
+    """ Test Re-verify Email Confirmation View Controller """
+    def test_for_resend_email_confirm_link(self):
+        """Test for resend email confirmation mail when user request for it"""
+        self.user_data['email'] = 'example3@mail.com'
+        res = self.client().post('/api/auth/reverify-email', data=self.user_data)
+        email_token = User.generate_email_token(self, email=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain an response
+        # and a status code 200(Success)
+        self.assertEqual(
+            result['message'], 'An email confirmation link has been sent to this email: %s' %("example3@mail.com")
+        )
+        self.assertEqual(res.status_code, 200)
+    
+    def test_for_non_existing_email(self):
+        """Test for if email passed during requesting for re-verification link exist in the database"""
+        self.user_data['email'] = 'emaildoes@notexist.com'
+        res = self.client().post('/api/auth/reverify-email', data=self.user_data)
+        
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a error response
+        # and an error status code 404(Resource not found)
+        self.assertEqual(
+            result['message'], "The email entered is not registered."
+        )
+        self.assertEqual(res.status_code, 404)
+    
+    def test_for_empty_email_input(self):
+        """Test if email inputed by user is empty"""
+        self.user_data['email'] = ''
+        res = self.client().post('/api/auth/reverify-email', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a error response
+        # and an error status code 400(Bad Request)
+        self.assertEqual(
+            result['message'], 'This field is required'
+        )
+        self.assertEqual(res.status_code, 400)
+    
+    def test_for_invalid_email_inputted(self):
+        """Test if email inputted by user is a valid email address"""
+        self.user_data['email'] = 'myinvalidemail@'
+        res = self.client().post('/api/auth/reverify-email', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a error response
+        # and an error status code 400(Bad Request)
+        self.assertEqual(
+            result['message'], 'Oops! You have inputed an invalid email.'
+        )
+        self.assertEqual(res.status_code, 400)
+    
+    def test_for_if_email_is_already_confirmed(self):
+        """Test if user is already confirmed when user request for a re-verification email link"""
+        res = self.client().post('/api/auth/reverify-email', data=self.confirmed_user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'This email has already been verified.'
+        )
+        self.assertEqual(res.status_code, 409)

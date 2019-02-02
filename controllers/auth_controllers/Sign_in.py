@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from flask_restful import Resource
-from app.models import User
+from database.db_models.user_models import User
 
 
 class LoginView(Resource):
@@ -29,7 +29,8 @@ class LoginView(Resource):
                 if access_token:
                     response = jsonify({
                         'message': 'Welcome! You are now logged in.',
-                        'access_token': access_token.decode()
+                        'access_token': access_token.decode(),
+                        'email_validation': user.confirmed
                     })
                     response.status_code = 200
                     return response
