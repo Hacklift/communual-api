@@ -17,7 +17,9 @@ class RegistrationView(Resource):
         username_input = request.form.get('username').lstrip()
         username = username_input.lower()
 
-        password = request.form.get('password').lstrip()
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
         phone_number = request.form.get('phone_number').lstrip()
         firstname = request.form.get('firstname')
         lastname = request.form.get('lastname')
@@ -39,6 +41,13 @@ class RegistrationView(Resource):
             })
             response.status_code = 400
             return response
+        if password != confirm_password:
+            response = jsonify({
+                'message': 'Oops! Sorry. The passwords you inputted are not the same.'
+            })
+            response.status_code = 400
+            return response
+
         # This validate if what is inputed are all numbers
         if phone_number.isnumeric() == False:
             response = jsonify({
@@ -65,6 +74,9 @@ class RegistrationView(Resource):
             response.status_code = 400
             return response
         else:
+
+            password_hash = User.generate_password_hash(self, password)
+
             # Find user email in the database
             user = User.query.filter_by(
                 email=email, phone_number=phone_number).first()
@@ -74,7 +86,7 @@ class RegistrationView(Resource):
                 try:
                     # Register the user
                     email = email
-                    password = password
+                    password = password_hash
                     phone_number = phone_number
                     firstname = firstname
                     lastname = lastname

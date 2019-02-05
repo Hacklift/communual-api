@@ -1,7 +1,6 @@
 from flask import request, jsonify
 from flask_restful import Resource
 from datetime import datetime
-from validate_email import validate_email
 from database.db_models.user_models import User
 
 

@@ -20,6 +20,7 @@ class AuthTestCase(unittest.TestCase):
             "password": "password",
             "username": "example1",
             "phone_number": "09067582433",
+            "confirm_password": "password"
         }
         # This is the user test json data with a predefined email, password and confirmed = True
         self.confirmed_user_data = {
@@ -27,6 +28,7 @@ class AuthTestCase(unittest.TestCase):
             "password": "password",
             "username": "example2",
             "phone_number": "09067582777",
+            "confirm_password": "password"
         }
 
         with self.app.app_context():
@@ -35,10 +37,10 @@ class AuthTestCase(unittest.TestCase):
             db.drop_all()
             db.create_all()
             user_1 = User(email="example3@mail.com", password="password", username="example3",
-                        phone_number="09067582999", confirmed=False, firstname='', lastname='')
+                          phone_number="09067582999", confirmed=False, firstname='', lastname='')
             user_2 = User(email="example2@mail.com", password="password", username="example2",
-                        phone_number="09067582777", confirmed=True, firstname='', lastname='')
-            
+                          phone_number="09067582777", confirmed=True, firstname='', lastname='')
+
             user_1.save()
             user_2.save()
 
@@ -51,6 +53,7 @@ class AuthTestCase(unittest.TestCase):
         self.assertEqual(
             result['message'], "Registration Successful. An email has been sent to this email: %s. Please confirm your email to proceed." % (self.user_data['email']))
         self.assertEqual(res.status_code, 201)
+        self.assertTrue(result['access_token'])
 
     def test_invalid_email_input(self):
         """Test for when user input a wrong email format."""
@@ -75,12 +78,24 @@ class AuthTestCase(unittest.TestCase):
     def test_invalid_password_input(self):
         """Test for when a user input a password lesser than 6 characters"""
         self.user_data['password'] = 'passw'
+        self.user_data['confirm_password'] = 'passw'
         res = self.client().post('/api/auth/signup', data=self.user_data)
         # Get the results returned in json format
         result = json.loads(res.data.decode())
         # assert that the request contains a error message and a 400 status code
         self.assertEqual(result['message'],
                          "Password should be greater than 6 characters")
+        self.assertEqual(res.status_code, 400)
+
+    def test_invalid_password_match(self):
+        """Test for when a user input a password that does not match the confirm_password"""
+        self.user_data['password'] = 'password222'
+        res = self.client().post('/api/auth/signup', data=self.user_data)
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+        # assert that the request contains a error message and a 400 status code
+        self.assertEqual(result['message'],
+                         "Oops! Sorry. The passwords you inputted are not the same.")
         self.assertEqual(res.status_code, 400)
 
     def test_invalid_phone_number_input(self):
@@ -131,24 +146,42 @@ class AuthTestCase(unittest.TestCase):
 
     def test_user_login(self):
         """Test registered user can login."""
-        res = self.client().post('/api/auth/signup', data=self.user_data)
-        self.assertEqual(res.status_code, 201)
-        login_res = self.client().post('/api/auth/login', data=self.user_data)
+        self.user_login_data = {
+            'email': 'example3@mail.com',
+            'password': 'password'
+        }
+        login_res = self.client().post('/api/auth/login', data=self.user_login_data)
 
         # get the results in json format
         result = json.loads(login_res.data.decode())
+
         # Test that the response contains success message
         self.assertEqual(result['message'], "Welcome! You are now logged in.")
         # Assert that the status code is equal to 200
         self.assertEqual(login_res.status_code, 200)
         self.assertTrue(result['access_token'])
+    
+    def test_invalid_email_input(self):
+        """Test for when user input a wrong email format."""
+        self.user_data['email'] = 'example@gmail.'
+        res = self.client().post('/api/auth/login', data=self.user_data)
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+        # assert that the request contains a error message and a 400 status code
+        self.assertEqual(result['message'], "Invalid Email Inputed")
+        self.assertEqual(res.status_code, 400)
+
 
     def test_invalid_user_login_input(self):
         """Test if email field is empty"""
-        res = self.client().post('/api/auth/signup', data=self.user_data)
-        self.assertEqual(res.status_code, 201)
-        self.user_data['email'] = ''
-        login_res = self.client().post('/api/auth/login', data=self.user_data)
+        # res = self.client().post('/api/auth/signup', data=self.user_data)
+        # self.assertEqual(res.status_code, 201)
+        self.user_login_data = {
+            'email': 'example3@mail.com',
+            'password': 'password'
+        }
+        self.user_login_data['email'] = ''
+        login_res = self.client().post('/api/auth/login', data=self.user_login_data)
 
         # get the results in json format
         result = json.loads(login_res.data.decode())
@@ -160,20 +193,19 @@ class AuthTestCase(unittest.TestCase):
     def test_non_registered_user_login(self):
         """Test non registered users cannot login."""
         # define a dictionary to represent an unregistered user
-        not_a_user = {
+        self.not_a_user = {
             'email': 'not_a_user@example.com',
-            'password': 'nope'
+            'password': 'nopenotauser'
         }
         # send a POST request to /auth/login with the data above
-        res = self.client().post('/api/auth/login', data=not_a_user)
+        res = self.client().post('/api/auth/login', data=self.not_a_user)
         # get the result in json
         result = json.loads(res.data.decode())
-
         # assert that this response must contain an error message
         # and an error status code 401(Unauthorized)
         self.assertEqual(res.status_code, 401)
         self.assertEqual(
-            result['message'], "Invalide credentials, Please try again.")
+            result['message'], "Invalid credentials, Please try again.")
 
     """ Test Email Confirmation View Controller """
 
@@ -183,7 +215,8 @@ class AuthTestCase(unittest.TestCase):
             "email": "example@mail.com",
             "password": "password",
             "username": "example",
-            "phone_number": "09067582555"
+            "phone_number": "09067582555",
+            "confirm_password": "password"
         }
         res = self.client().post('/api/auth/signup', data=self.email_user_data)
 
@@ -218,8 +251,9 @@ class AuthTestCase(unittest.TestCase):
             result['message'], "This Account has already been confirmed."
         )
         self.assertEqual(email_res.status_code, 409)
-    
+
     """ Test Re-verify Email Confirmation View Controller """
+
     def test_for_resend_email_confirm_link(self):
         """Test for resend email confirmation mail when user request for it"""
         self.user_data['email'] = 'example3@mail.com'
@@ -232,15 +266,16 @@ class AuthTestCase(unittest.TestCase):
         # assert that this response must contain an response
         # and a status code 200(Success)
         self.assertEqual(
-            result['message'], 'An email confirmation link has been sent to this email: %s' %("example3@mail.com")
+            result['message'], 'An email confirmation link has been sent to this email: %s' % (
+                "example3@mail.com")
         )
         self.assertEqual(res.status_code, 200)
-    
+
     def test_for_non_existing_email(self):
         """Test for if email passed during requesting for re-verification link exist in the database"""
         self.user_data['email'] = 'emaildoes@notexist.com'
         res = self.client().post('/api/auth/reverify-email', data=self.user_data)
-        
+
         # Get the results returned in json format
         result = json.loads(res.data.decode())
 
@@ -250,7 +285,7 @@ class AuthTestCase(unittest.TestCase):
             result['message'], "The email entered is not registered."
         )
         self.assertEqual(res.status_code, 404)
-    
+
     def test_for_empty_email_input(self):
         """Test if email inputed by user is empty"""
         self.user_data['email'] = ''
@@ -265,7 +300,7 @@ class AuthTestCase(unittest.TestCase):
             result['message'], 'This field is required'
         )
         self.assertEqual(res.status_code, 400)
-    
+
     def test_for_invalid_email_inputted(self):
         """Test if email inputted by user is a valid email address"""
         self.user_data['email'] = 'myinvalidemail@'
@@ -280,7 +315,7 @@ class AuthTestCase(unittest.TestCase):
             result['message'], 'Oops! You have inputed an invalid email.'
         )
         self.assertEqual(res.status_code, 400)
-    
+
     def test_for_if_email_is_already_confirmed(self):
         """Test if user is already confirmed when user request for a re-verification email link"""
         res = self.client().post('/api/auth/reverify-email', data=self.confirmed_user_data)
@@ -294,3 +329,112 @@ class AuthTestCase(unittest.TestCase):
             result['message'], 'This email has already been verified.'
         )
         self.assertEqual(res.status_code, 409)
+
+    """ Test forget password view controller """
+
+    def test_for_empty_email_input(self):
+        """Test for empty email input"""
+        self.user_data['email'] = ''
+        res = self.client().post('/api/auth/forget-password', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'This field is required'
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_for_invalid_email_inputted(self):
+        """Test for invalid email input"""
+        self.user_data['email'] = 'myinvalidemail@'
+        res = self.client().post('/api/auth/forget-password', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'Oops! You have inputed an invalid email.'
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_for_non_existing_email(self):
+        """Test for email that does not exist in the database"""
+        self.user_data['email'] = 'non_existing@email.com'
+        res = self.client().post('/api/auth/forget-password', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'This email is not registered.'
+        )
+        self.assertEqual(res.status_code, 404)
+
+    def test_password_reset_link_sent(self):
+        """Test for reset password link sent to user"""
+        res = self.client().post('/api/auth/forget-password', data=self.confirmed_user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'A password reset link has been sent to this email: %s' % (
+                'example2@mail.com')
+        )
+        self.assertEqual(res.status_code, 200)
+
+    """ Test for Reset password controller """
+
+    def test_for_empty_password_field(self):
+        """Test for empty password field."""
+        self.user_data['password'] = ''
+        res = self.client().post('/api/auth/reset-password/', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'This field is required.'
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_for_empty_confirm_password_field(self):
+        """Test for empty confirm password input"""
+        self.user_data['confirm_password'] = ''
+        res = self.client().post('/api/auth/reset-password/', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'This field is required.'
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_for_password_match(self):
+        """Test for incorrect password matching"""
+        self.user_data['password'] = 'password2'
+        res = self.client().post('/api/auth/reset-password/', data=self.user_data)
+
+        # Get the results returned in json format
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain a response
+        # and an error status code 409(Conflit)
+        self.assertEqual(
+            result['message'], 'Oops! Sorry. The passwords you inputted are not the same.'
+        )
+        self.assertEqual(res.status_code, 400)
