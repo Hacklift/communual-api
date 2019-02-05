@@ -35,11 +35,20 @@ class User(db.Model):
         self.confirmed = confirmed
         self.confirmed_on_date = confirmed_on_date
 
-    def password_is_valid(self, password):
+    def generate_password_hash(self, password):
         """
-        Checks the password against it's hash to validates the user's password
+        Generate a password hash from the password provided
         """
-        return Bcrypt().check_password_hash(self.password, password)
+        psw_hash = Bcrypt().generate_password_hash(password)
+
+        return psw_hash
+
+    def check_password_validation(self, psw_hash, password):
+        """
+        Check the validity of the password against the one provided by the user
+        """
+        check_password = Bcrypt().check_password_hash(psw_hash, password)
+        return check_password
 
     def save(self):
         """Save a user to the database.
