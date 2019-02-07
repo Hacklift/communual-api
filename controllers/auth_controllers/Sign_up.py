@@ -1,20 +1,27 @@
+import os
 from flask import request, jsonify
 from flask_restful import Resource
 from validate_email import validate_email
-from app.models import User
+from helpers.email import send_email
+from helpers.email_template import email_template
+from database.db_models.user_models import User
 
 
 class RegistrationView(Resource):
     # This register a user
     def post(self):
-        email = request.form.get('email').lstrip()
+        email_input = request.form.get('email').lstrip()
+        email = email_input.lower()
 
         # Remove whitespaces from left and right
-        username = request.form.get('username').lstrip()
+        username_input = request.form.get('username').lstrip()
+        username = username_input.lower()
+
         password = request.form.get('password').lstrip()
         phone_number = request.form.get('phone_number').lstrip()
         firstname = request.form.get('firstname')
         lastname = request.form.get('lastname')
+        confirmed = False
 
         # validate email as a valid email address without using regex
         is_valid = validate_email(email)
@@ -71,23 +78,37 @@ class RegistrationView(Resource):
                     phone_number = phone_number
                     firstname = firstname
                     lastname = lastname
+                    confirmed = confirmed
                     user = User(
                         email=email,
                         password=password,
                         phone_number=phone_number, firstname=firstname, lastname=lastname,
-                        username=username
+                        username=username,
+                        confirmed=confirmed
                     )
                     user.save()
 
                     # Generate Authentication token for the user using the user_id
                     access_token = user.generate_token(user.id)
 
+                    auth_user_email = user.generate_email_token(user.email)
+
+                    confirm_url = 'http://%s/api/auth/email-confirmation/?emailtoken=%s' % (os.getenv(
+                        'HOST_URL'), auth_user_email.decode())
+
+                    html = email_template(confirm_url)
+
+                    subject = "Please confirm your mail"
+
+                    send_email(user.email, subject, html)
+
                     response = jsonify({
                         'email': user.email,
                         'password': user.password,
                         'username': user.username,
                         'access_token': access_token.decode(),
-                        'message': 'You registered successfully.'
+                        'email_validation': user.confirmed,
+                        'message': 'Registration Successful. An email has been sent to this email: ' + user.email + '. Please confirm your email to proceed.'
                     })
 
                     # return a response notifying the user that they registered
@@ -97,7 +118,7 @@ class RegistrationView(Resource):
                 except Exception as e:
                     # An error occured, therefore return a string message containing the error
                     response = jsonify({
-                        'message': 'username is already been used by another user.',
+                        'message': str(e),
                     })
                     response.status_code = 409
                     return response
