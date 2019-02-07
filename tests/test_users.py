@@ -109,3 +109,50 @@ class AuthTestCase(unittest.TestCase):
         result = json.loads(second_res.data.decode())
         self.assertEqual(
             result['message'], 'Email or phone number is already been used by an existing user. Please try again.')
+
+    # Login test
+    def test_user_login(self):
+        """Test registered user can login."""
+        res = self.client().post('/api/auth/signup', data=self.user_data)
+        self.assertEqual(res.status_code, 201)
+        login_res = self.client().post('/api/auth/login', data=self.user_data)
+
+        # get the results in json format
+        result = json.loads(login_res.data.decode())
+        # Test that the response contains success message
+        self.assertEqual(result['message'], "Welcome! You are now logged in.")
+        # Assert that the status code is equal to 200
+        self.assertEqual(login_res.status_code, 200)
+        self.assertTrue(result['access_token'])
+
+    def test_invalid_user_login_input(self):
+        """Test if email field is empty"""
+        res = self.client().post('/api/auth/signup', data=self.user_data)
+        self.assertEqual(res.status_code, 201)
+        self.user_data['email'] = ''
+        login_res = self.client().post('/api/auth/login', data=self.user_data)
+
+        # get the results in json format
+        result = json.loads(login_res.data.decode())
+        # Test that the response contains success message
+        self.assertEqual(result['message'], "This field is required.")
+        # Assert that the status code is equal to 400
+        self.assertEqual(login_res.status_code, 400)
+
+    def test_non_registered_user_login(self):
+        """Test non registered users cannot login."""
+        # define a dictionary to represent an unregistered user
+        not_a_user = {
+            'email': 'not_a_user@example.com',
+            'password': 'nope'
+        }
+        # send a POST request to /auth/login with the data above
+        res = self.client().post('/api/auth/login', data=not_a_user)
+        # get the result in json
+        result = json.loads(res.data.decode())
+
+        # assert that this response must contain an error message
+        # and an error status code 401(Unauthorized)
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(
+            result['message'], "Invalide credentials, Please try again.")
